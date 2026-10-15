@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>История входов</title>
+</head>
+<body>
+    <h1>История ваших входов</h1>
+ 
+    <ul>
+        {% for entry in entries %}
+            <li>{{ entry[0] }}</li>
+        {% else %}
+            <li>Пока нет записей.</li>
+        {% endfor %}
+    </ul>
+</body>
+</html>

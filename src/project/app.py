@@ -1,9 +1,10 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 import mysql.connector
 from werkzeug.security import generate_password_hash, check_password_hash
-
+import sqlite3
+from pathlib import Path
+from datetime import datetime
 app = Flask(__name__)
-# Секретный ключ необходим для безопасной работы сессий
 app.secret_key = 'super_secret_key_for_sessions' 
 
 # Вынесем подключение к БД в отдельную функцию для удобства
@@ -58,6 +59,7 @@ def user_login():
         # Проверяем, существует ли пользователь и совпадает ли хеш пароля
         if user and check_password_hash(user['password_hash'], password):
             session['user_id'] = user['id']
+            save_login(user['id'])
             session['username'] = user['username']
             session['balance'] = user.get('balance', 0)
             return jsonify({"result": True})
@@ -97,6 +99,7 @@ def to_lk():
     }
     return render_template('lk.html', user=udt)
 
+
 @app.route("/make_request", methods=['POST'])
 def make_request():
     # Проверка авторизации
@@ -123,6 +126,47 @@ def make_request():
             return jsonify({"result": False, "error": "Ошибка базы данных"})
     else:
         return jsonify({"result": False, "error": "Недостаточно средств на балансе"})
-
+HISTORY_DB = Path(__file__).with_name("login_history.sqlite3")
+ 
+def history_connection():
+    conn = sqlite3.connect(str(HISTORY_DB))
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS login_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            login_time TEXT NOT NULL
+        )
+    """)
+    conn.commit()
+    return conn
+ 
+def save_login(user_id):
+    conn = history_connection()
+    try:
+        time = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
+        conn.execute(
+            "INSERT INTO login_history (user_id, login_time) VALUES (?, ?)",
+            (user_id, time)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+ 
+@app.route('/history')
+def history():
+    if 'user_id' not in session:
+        return render_template('login.html')
+ 
+    conn = history_connection()
+    try:
+        rows = conn.execute(
+            """SELECT login_time FROM login_history
+               WHERE user_id = ? ORDER BY id DESC""",
+            (session['user_id'],)
+        ).fetchall()
+    finally:
+        conn.close()
+ 
+    return render_template('history.html', entries=rows)
 if __name__ == '__main__':
     app.run(debug=True)
